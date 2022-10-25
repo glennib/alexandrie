@@ -75,14 +75,6 @@ impl Indexer for Index {
         }
     }
 
-    fn commit_and_push(&self, msg: &str) -> Result<(), Error> {
-        match self {
-            Index::CommandLine(idx) => idx.commit_and_push(msg),
-            #[cfg(feature = "git2")]
-            Index::Git2(idx) => idx.commit_and_push(msg),
-        }
-    }
-
     fn all_records(&self, name: &str) -> Result<Vec<CrateVersion>, Error> {
         match self {
             Index::CommandLine(idx) => idx.all_records(name),
@@ -104,6 +96,14 @@ impl Indexer for Index {
             Index::CommandLine(idx) => idx.match_record(name, req),
             #[cfg(feature = "git2")]
             Index::Git2(idx) => idx.match_record(name, req),
+        }
+    }
+
+    fn commit_and_push(&self, msg: &str) -> Result<(), Error> {
+        match self {
+            Index::CommandLine(idx) => idx.commit_and_push(msg),
+            #[cfg(feature = "git2")]
+            Index::Git2(idx) => idx.commit_and_push(msg),
         }
     }
 
