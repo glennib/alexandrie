@@ -240,6 +240,8 @@ pub(crate) async fn put(mut req: Request<State>) -> tide::Result {
             links: metadata.links,
         };
 
+        println!("api::publish::put: crate_desc:\n{:?}", crate_desc);
+
         //? Attempt to insert the new crate.
         let now = Utc::now().naive_utc().format(DATETIME_FORMAT).to_string();
         let new_crate = NewCrate {
@@ -254,6 +256,8 @@ pub(crate) async fn put(mut req: Request<State>) -> tide::Result {
 
         //? Does the crate already exists?
         let exists = utils::checks::crate_exists(conn, new_crate.canon_name)?;
+
+        println!("api::publish::put: exists={}", exists);
 
         //? Are we adding a new crate or updating a new one?
         let operation = if exists {
@@ -294,6 +298,8 @@ pub(crate) async fn put(mut req: Request<State>) -> tide::Result {
 
             //? Is the attempted publication version higher than the latest version for that release?
             let requirement = VersionReq::parse(&format!("^{}.0.0", crate_desc.vers.major))?;
+            println!("api::publish::put: requirement={}", requirement.to_string());
+            println!("api::publish::put: Next action is the match_record search");
             let latest = state.index.match_record(krate.name.as_str(), requirement)?;
             if crate_desc.vers <= latest.vers {
                 return Err(Error::from(AlexError::VersionTooLow {
