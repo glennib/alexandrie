@@ -127,7 +127,7 @@ impl Tree {
             .ok_or_else(|| {
                 Error::from(IndexError::CrateNotFound {
                     name: String::from(name),
-                    version_requirement: VersionReq::exact(&version).to_string(),
+                    version: version.to_string(),
                 })
             })?;
 

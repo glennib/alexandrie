@@ -31,11 +31,11 @@ pub enum IndexError {
         path: String,
     },
     /// The requested crate cannot be found.
-    #[error("no crate named '{name}' found. version requirement: {version_requirement}")]
+    #[error("no crate named '{name}' with version {version} found")]
     CrateNotFound {
         /// The requested crate's name.
         name: String,
-        version_requirement: String,
+        version: String,
     },
     /// The published crate version is lower than the current hosted version.
     #[error("the published version is too low (hosted version is {hosted}, and thus {published} <= {hosted})")]
