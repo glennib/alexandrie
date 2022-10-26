@@ -15,7 +15,6 @@ use serde::{Deserialize, Serialize};
 use tar::Archive;
 use tide::Request;
 
-use crate::api::crates::publish::version_requirements::requirement_from_published_version;
 use alexandrie_index::{CrateDependency, CrateDependencyKind, CrateVersion, Indexer};
 use alexandrie_storage::Store;
 
@@ -241,8 +240,6 @@ pub(crate) async fn put(mut req: Request<State>) -> tide::Result {
             links: metadata.links,
         };
 
-        log::debug!("api::publish::put: crate_desc:\n{:?}", crate_desc);
-
         //? Attempt to insert the new crate.
         let now = Utc::now().naive_utc().format(DATETIME_FORMAT).to_string();
         let new_crate = NewCrate {
@@ -257,8 +254,6 @@ pub(crate) async fn put(mut req: Request<State>) -> tide::Result {
 
         //? Does the crate already exists?
         let exists = utils::checks::crate_exists(conn, new_crate.canon_name)?;
-
-        log::debug!("api::publish::put: exists={}", exists);
 
         //? Are we adding a new crate or updating a new one?
         let operation = if exists {
@@ -298,27 +293,19 @@ pub(crate) async fn put(mut req: Request<State>) -> tide::Result {
             }
 
             //? Is the attempted publication version higher than the latest version for that release?
-            let requirement = requirement_from_published_version(&crate_desc.vers);
-            log::debug!("api::publish::put: looking for latest package within requirement={}", requirement.to_string());
+            let requirement = version_requirement_from_published_version(&crate_desc.vers);
             let latest = state.index.match_record(krate.name.as_str(), requirement)?;
             match latest {
                 Some(latest) => {
-                    log::debug!("api::publish::put: found a package within the requirement");
                     if crate_desc.vers <= latest.vers {
-                        log::error!(
-                            "api::publish::put: the published package ({}) has a lower version than the latest ({})",
-                            crate_desc.vers.to_string(),latest.vers.to_string());
                         return Err(Error::from(AlexError::VersionTooLow {
                             krate: krate.name,
                             hosted: latest.vers,
                             published: crate_desc.vers,
                         }));
                     }
-                    log::debug!("api::publish::put: the published package is the latest within the requirement.");
                 }
-                None => {
-                    log::debug!("api::publish::put: no package within the requirement, carry on");
-                }
+                None => {}
             }
 
             //? Update the crate's metadata.
@@ -410,61 +397,76 @@ pub(crate) async fn put(mut req: Request<State>) -> tide::Result {
     Ok(transaction.await?)
 }
 
-mod version_requirements {
-    use semver::{Version, VersionReq};
+pub fn version_requirement_from_published_version(version: &Version) -> VersionReq {
+    if version.major == 0 {
+        VersionReq::parse(&format!("^0.{}.0", version.minor)).unwrap()
+    } else {
+        VersionReq::parse(&format!("^{}.0.0", version.major)).unwrap()
+    }
+}
 
-    pub fn requirement_from_published_version(version: &Version) -> VersionReq {
-        if version.major == 0 {
-            VersionReq::parse(&format!("^0.{}.0", version.minor)).unwrap()
-        } else {
-            VersionReq::parse(&format!("^{}.0.0", version.major)).unwrap()
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn get_latest_matching_version_within_requirement<'a, I>(
+        requirement: &VersionReq,
+        versions: I,
+    ) -> Option<&'a Version>
+        where
+            I: IntoIterator<Item=&'a Version>,
+    {
+        versions
+            .into_iter()
+            .filter(|version| requirement.matches(version))
+            .max_by(|v1, v2| v1.cmp(v2))
+            .map_or(None, |o| Some(o))
     }
 
-    #[cfg(test)]
-    mod tests {
-        use semver::{Version, VersionReq};
+    fn to_versions(strs: Vec<&str>) -> Vec<Version> {
+        strs.into_iter()
+            .map(|version_string| Version::parse(version_string).unwrap())
+            .collect()
+    }
 
-        fn imitate_filter_function_from_tree<'a, I>(
-            requirement: &VersionReq,
-            versions: I,
-        ) -> Option<&'a Version>
-            where
-                I: IntoIterator<Item=&'a Version>,
-        {
-            versions
-                .into_iter()
-                .filter(|version| requirement.matches(version))
-                .max_by(|v1, v2| v1.cmp(v2))
-                .map_or(None, |o| Some(o))
-        }
 
-        fn to_versions(strs: Vec<&str>) -> Vec<Version> {
-            strs.into_iter()
-                .map(|version_string| Version::parse(version_string).unwrap())
-                .collect()
-        }
+    #[test]
+    fn major_zero_with_match() {
+        let database_entries = to_versions(vec!["0.1.0", "0.1.1", "1.0.0", "2.0.0"]);
+        let published_version = "0.1.2";
+        let published_version = Version::parse(published_version).unwrap();
+        let requirement = version_requirement_from_published_version(&published_version);
+        let found = get_latest_matching_version_within_requirement(&requirement, &database_entries);
+        assert_eq!(found, Some(&Version::parse("0.1.1").unwrap()));
+    }
 
-        use super::*;
+    #[test]
+    fn major_zero_without_match() {
+        let database_entries = to_versions(vec!["0.1.0", "0.1.1", "1.0.0", "2.0.0"]);
+        let published_version = "0.2.0";
+        let published_version = Version::parse(published_version).unwrap();
+        let requirement = version_requirement_from_published_version(&published_version);
+        let found = get_latest_matching_version_within_requirement(&requirement, &database_entries);
+        assert_eq!(found, None);
+    }
 
-        #[test]
-        fn major_zero() {
-            let database_entries = to_versions(vec!["0.1.0", "0.1.1", "1.0.0", "2.0.0"]);
-            let published_version = "0.1.2";
-            let published_version = Version::parse(published_version).unwrap();
-            let requirement = requirement_from_published_version(&published_version);
-            let found = imitate_filter_function_from_tree(&requirement, &database_entries);
-            assert_eq!(found, Some(&Version::parse("0.1.1").unwrap()));
-        }
+    #[test]
+    fn major_non_zero_with_match() {
+        let database_entries = to_versions(vec!["0.1.0", "0.1.1", "1.0.0", "2.0.0"]);
+        let published_version = "1.0.1";
+        let published_version = Version::parse(published_version).unwrap();
+        let requirement = version_requirement_from_published_version(&published_version);
+        let found = get_latest_matching_version_within_requirement(&requirement, &database_entries);
+        assert_eq!(found, Some(&Version::parse("1.0.0").unwrap()));
+    }
 
-        #[test]
-        fn major_non_zero() {
-            let database_entries = to_versions(vec!["0.1.0", "0.1.1", "1.0.0", "2.0.0"]);
-            let published_version = "1.0.1";
-            let published_version = Version::parse(published_version).unwrap();
-            let requirement = requirement_from_published_version(&published_version);
-            let found = imitate_filter_function_from_tree(&requirement, &database_entries);
-            assert_eq!(found, Some(&Version::parse("1.0.0").unwrap()));
-        }
+    #[test]
+    fn major_non_zero_without_match() {
+        let database_entries = to_versions(vec!["0.1.0", "0.1.1", "2.0.0"]);
+        let published_version = "1.0.1";
+        let published_version = Version::parse(published_version).unwrap();
+        let requirement = version_requirement_from_published_version(&published_version);
+        let found = get_latest_matching_version_within_requirement(&requirement, &database_entries);
+        assert_eq!(found, None);
     }
 }
