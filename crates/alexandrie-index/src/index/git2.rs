@@ -121,7 +121,7 @@ impl Indexer for Git2Index {
         self.tree.latest_record(name)
     }
 
-    fn match_record(&self, name: &str, req: VersionReq) -> Result<CrateVersion, Error> {
+    fn match_record(&self, name: &str, req: VersionReq) -> Result<Option<CrateVersion>, Error> {
         self.tree.match_record(name, req)
     }
 

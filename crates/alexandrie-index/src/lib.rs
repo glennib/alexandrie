@@ -39,7 +39,7 @@ pub trait Indexer {
     /// Retrieves the latest version record of a crate.
     fn latest_record(&self, name: &str) -> Result<CrateVersion, Error>;
     /// Retrieves the latest crate version record that matches the given name and version requirement.
-    fn match_record(&self, name: &str, req: VersionReq) -> Result<CrateVersion, Error>;
+    fn match_record(&self, name: &str, req: VersionReq) -> Result<Option<CrateVersion>, Error>;
     /// Commits and pushes changes upstream.
     fn commit_and_push(&self, msg: &str) -> Result<(), Error>;
     /// Adds a new crate record into the index.
@@ -91,7 +91,7 @@ impl Indexer for Index {
         }
     }
 
-    fn match_record(&self, name: &str, req: VersionReq) -> Result<CrateVersion, Error> {
+    fn match_record(&self, name: &str, req: VersionReq) -> Result<Option<CrateVersion>, Error> {
         match self {
             Index::CommandLine(idx) => idx.match_record(name, req),
             #[cfg(feature = "git2")]
