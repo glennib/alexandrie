@@ -25,10 +25,11 @@ pub enum Error {
 #[derive(Error, Debug)]
 pub enum IndexError {
     /// The requested crate cannot be found.
-    #[error("no crate named '{name}' found")]
+    #[error("no crate named '{name}' found. debug info: {debug_info}")]
     CrateNotFound {
         /// The requested crate's name.
         name: String,
+        debug_info: String,
     },
     /// The published crate version is lower than the current hosted version.
     #[error("the published version is too low (hosted version is {hosted}, and thus {published} <= {hosted})")]
