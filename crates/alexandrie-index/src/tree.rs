@@ -30,7 +30,7 @@ impl Tree {
 
     pub fn match_record(&self, name: &str, req: VersionReq) -> Result<CrateVersion, Error> {
         let path = self.compute_record_path(name);
-        let file = fs::File::open(path).map_err(|err| match err.kind() {
+        let file = fs::File::open(path.clone()).map_err(|err| match err.kind() {
             io::ErrorKind::NotFound => Error::from(IndexError::CrateNotFound {
                 name: String::from(name),
                 debug_info: "Tree::match_record: file = fs::File::open NotFound".into(),
@@ -46,7 +46,11 @@ impl Tree {
 
         Ok(found.ok_or_else(|| IndexError::CrateNotFound {
             name: String::from(name),
-            debug_info: "Tree::match_record: found = search file for crate".into(),
+            debug_info: format!(
+                "Tree::match_record: found = search file {} for crate with version req {}",
+                path.to_str().unwrap(),
+                req.to_string()
+            ),
         })?)
     }
 
@@ -105,8 +109,8 @@ impl Tree {
     }
 
     pub fn alter_record<F>(&self, name: &str, version: Version, func: F) -> Result<(), Error>
-        where
-            F: FnOnce(&mut CrateVersion),
+    where
+        F: FnOnce(&mut CrateVersion),
     {
         let path = self.compute_record_path(name);
         let file = fs::File::open(path.as_path()).map_err(|err| match err.kind() {
@@ -130,7 +134,8 @@ impl Tree {
             .ok_or_else(|| {
                 Error::from(IndexError::CrateNotFound {
                     name: String::from(name),
-                    debug_info: "Tree::alter_record: found = search for crate version not found".into(),
+                    debug_info: "Tree::alter_record: found = search for crate version not found"
+                        .into(),
                 })
             })?;
 
